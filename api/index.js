@@ -1,27 +1,25 @@
 const Busboy = require('busboy');
 const FormData = require('form-data');
 const axios = require('axios');
-// Pastikan zencf terinstall atau ada filenya
 const { zencf } = require('zencf'); 
 
-const headers = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
-    'sec-ch-ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
-    'sec-ch-ua-mobile': '?1',
-    'sec-ch-ua-platform': '"Android"',
-    'Accept-Language': 'id-ID,id;q=0.9,en-AU;q=0.8,en;q=0.7,en-US;q=0.6'
-};
+// 1. Header yang LEBIH LENGKAP agar terlihat seperti browser asli (Android Chrome)
+const USER_AGENT = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36';
 
-async function solveTurnstile() {
-    // Logika solve turnstile dari kode Anda
-    try {
-        const { token } = await zencf.turnstileMin('https://picupscaler.com', '0x4AAAAAABvAGhZHOnPwmOvR');
-        return token;
-    } catch (e) {
-        console.error("Turnstile Error:", e);
-        throw new Error("Gagal memproses keamanan (Turnstile).");
-    }
-}
+const commonHeaders = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://picupscaler.com',
+    'Referer': 'https://picupscaler.com/',
+    'Sec-Ch-Ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
+    'Sec-Ch-Ua-Mobile': '?1',
+    'Sec-Ch-Ua-Platform': '"Android"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin', // Penting agar tidak dianggap lintas situs mencurigakan
+    'X-Requested-With': 'XMLHttpRequest'
+};
 
 // Helper untuk memproses file upload di Vercel
 const parseForm = (req) => {
@@ -57,12 +55,21 @@ const parseForm = (req) => {
 };
 
 module.exports = async (req, res) => {
+    // Enable CORS agar bisa dipanggil dari frontend
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
-        // 1. Parse Uploaded File
+        console.log("Menerima request...");
         const { file, fields } = await parseForm(req);
         
         if (!file) {
@@ -70,14 +77,18 @@ module.exports = async (req, res) => {
         }
 
         const scaleVal = fields.scale || '2';
-        if (!['2', '4', '8'].includes(scaleVal)) {
-            return res.status(400).json({ error: 'Scale harus 2, 4, atau 8.' });
+
+        // 2. Mendapatkan Token Turnstile
+        // NOTE: Pastikan zencf berjalan di lingkungan server yang valid
+        console.log("Sedang bypass Turnstile...");
+        const { token } = await zencf.turnstileMin('https://picupscaler.com', '0x4AAAAAABvAGhZHOnPwmOvR');
+
+        if (!token) {
+            throw new Error("Gagal mendapatkan token Turnstile");
         }
+        console.log("Token didapat:", token.substring(0, 15) + "...");
 
-        // 2. Solve Turnstile
-        const turnstileToken = await solveTurnstile();
-
-        // 3. Prepare Form Data untuk API PicUpscaler
+        // 3. Susun FormData
         const form = new FormData();
         form.append('image', file.buffer, {
             filename: file.filename,
@@ -85,35 +96,51 @@ module.exports = async (req, res) => {
         });
         form.append('user_id', '');
         form.append('is_public', 'true');
-        form.append('turnstile_token', turnstileToken);
+        form.append('turnstile_token', token);
         form.append('scale', scaleVal);
 
-        // 4. Hit External API
+        // 4. Hit API dengan Header yang digabungkan
+        // Penting: Jangan menimpa header form-data boundary
+        const requestHeaders = {
+            ...commonHeaders,
+            ...form.getHeaders()
+        };
+
+        console.log("Mengirim ke PicUpscaler...");
         const apiResponse = await axios.post('https://picupscaler.com/api/generate/handle', form, {
-            headers: {
-                ...headers,
-                ...form.getHeaders(),
-                'origin': 'https://picupscaler.com',
-                'referer': 'https://picupscaler.com/',
-                'accept': 'application/json, text/plain, */*'
-            },
-            maxBodyLength: Infinity
+            headers: requestHeaders,
+            maxBodyLength: Infinity,
+            // Tambahkan timeout agar tidak hang
+            timeout: 60000 
         });
 
-        // 5. Return result
-        // Asumsi apiResponse.data mengembalikan JSON berisi URL hasil
+        console.log("Sukses!");
         return res.status(200).json(apiResponse.data);
 
     } catch (error) {
-        console.error(error);
+        console.error("Error Detail:", error.message);
+        
+        if (error.response) {
+            console.error("Status:", error.response.status);
+            console.error("Data:", error.response.data);
+            
+            // Jika 403, berarti Cloudflare memblokir IP Vercel
+            if (error.response.status === 403) {
+                return res.status(403).json({ 
+                    error: 'Server target menolak akses (403 Forbidden).', 
+                    suggestion: 'IP Vercel mungkin diblokir Cloudflare. Coba jalankan di local/VPS.',
+                    details: error.response.data
+                });
+            }
+        }
+
         return res.status(500).json({ 
-            error: error.message || 'Terjadi kesalahan pada server.',
-            details: error.response?.data || null
+            error: 'Gagal memproses gambar.',
+            message: error.message
         });
     }
 };
 
-// Konfigurasi agar Vercel tidak mem-parse body secara otomatis (karena kita pakai busboy)
 export const config = {
     api: {
         bodyParser: false,
