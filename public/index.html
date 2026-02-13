@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Upscaler</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+</head>
+<body>
+
+    <main class="container">
+        <header>
+            <h1>AI Super Upscale</h1>
+            <p>Tingkatkan kualitas foto hingga 8x lipat dengan AI.</p>
+        </header>
+
+        <div class="card upload-card">
+            <div class="upload-area" id="drop-zone">
+                <i class="bi bi-cloud-arrow-up-fill icon-upload"></i>
+                <p>Sentuh untuk upload foto</p>
+                <input type="file" id="fileInput" accept="image/*" hidden>
+            </div>
+            
+            <div class="preview-container" id="previewContainer" style="display: none;">
+                <img id="previewImg" src="" alt="Preview">
+                <button class="btn-remove" id="btnRemove"><i class="bi bi-x"></i></button>
+            </div>
+
+            <div class="options">
+                <label>Pilih Skala:</label>
+                <div class="scale-selector">
+                    <button class="scale-btn active" data-value="2">2x</button>
+                    <button class="scale-btn" data-value="4">4x</button>
+                    <button class="scale-btn" data-value="8">8x</button>
+                </div>
+            </div>
+
+            <button id="btnUpscale" class="btn-primary" disabled>
+                <span class="btn-text">Mulai Upscale</span>
+                <span class="loader" style="display: none;"></span>
+            </button>
+            <div id="statusMsg" class="status-msg"></div>
+        </div>
+
+        <div class="card result-card" id="resultCard" style="display: none;">
+            <h3>Hasil Perbandingan</h3>
+            <div class="comparison-container" id="comparisonContainer">
+                <div class="img-comp-wrapper">
+                    <div class="img-comp-img img-comp-after">
+                        <img id="resAfter" src="" alt="After">
+                        <span class="label-after">HD</span>
+                    </div>
+                    <div class="img-comp-img img-comp-before">
+                        <img id="resBefore" src="" alt="Before">
+                        <span class="label-before">Original</span>
+                    </div>
+                    <div class="comp-slider">
+                        <div class="slider-line"></div>
+                        <div class="slider-button"><i class="bi bi-arrows-expand-vertical"></i></div> 
+                        </div>
+                </div>
+            </div>
+            <a id="downloadBtn" href="#" class="btn-download" download>Download HD <i class="bi bi-download"></i></a>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
